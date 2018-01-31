@@ -1,0 +1,431 @@
+---
+title: "Project 1 An R Notebook Data Story on Presidential Inaugural Speeches"
+output: html_notebook
+---
+#####In this project,using text of inaugural speeches from US presidents from Andrew Jackson to Donal Trump, I analyzed emotions, sentence lengths and topics of each president's speech, and the relationships between these and variables such as era and party affiliation are stated as follows.
+
+#####There are four parts in this report. First, I examine if presidents from different political parties differ in emotion, sentence length and topics in their speeches. Second, I analyze the influence on speeches by historial eras. I state my conclusion in Part 3 and list resources I refered to in Part 4.
+
+
+###PART I Inangural Speeches of presidents from diffrent parties
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+packages.used <- c("rvest", "tibble", "qdap", 
+                "sentimentr", "gplots", "dplyr",
+                "tm", "syuzhet", "factoextra", 
+                "beeswarm", "scales", "RColorBrewer",
+                "RANN", "tm", "topicmodels")
+
+# check packages that need to be installed.
+packages.needed=setdiff(packages.used, 
+                        intersect(installed.packages()[,1], 
+                                  packages.used))
+# install additional packages
+if(length(packages.needed)>0){
+  install.packages(packages.needed, dependencies = TRUE)
+}
+
+# load packages
+library("rvest")
+library("tibble")
+library("qdap")
+library("sentimentr")
+library("gplots")
+library("dplyr")
+library("tm")
+library("syuzhet")
+library("factoextra")
+library("beeswarm")
+library("scales")
+library("RColorBrewer")
+library("RANN")
+library("tm")
+library("topicmodels")
+```
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE,include=FALSE}
+print(R.version)
+```
+####Presidents from Republican Party
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+people.Repub <- c("AbrahamLincoln","UlyssesSGrant","JamesGarfield","TheodoreRoosevelt","WilliamHowardTaft","HerbertHoover","DwightDEisenhower","RichardNixon","RonaldReagan","GeorgeBush", "GeorgeWBush","DonaldJTrump")
+people.Demo <- c("AndrewJackson","WoodrowWilson","FranklinDRoosevelt","HarrySTruman","JohnFKennedy", "LyndonBJohnson", "JimmyCarter","WilliamJClinton", "BarackObama" )
+people.all <- c(people.Repub,people.Demo)
+#Presidents from Republican Party
+people.Repub
+```
+####Presidents from Democratic Party
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#Presidents from Democratic Party
+people.Demo
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE,include=FALSE}
+sentence.list.inaug <- sentence.list.sel[sentence.list.sel$type == "inaug",]
+sentence.list.Repub <- sentence.list.inaug[sentence.list.inaug$Party == "Republican",]
+sentence.list.Demo <- sentence.list.inaug[sentence.list.inaug$Party == "Democratic",]
+sentence.list.Repub <- sentence.list.Repub[-c(1:31),]
+sentence.list.Demo <- sentence.list.Demo[-c(1:31),]
+sentence.list.Repub
+sentence.list.Demo
+sentence.list.all <- rbind(sentence.list.Repub,sentence.list.Demo)
+```
+####Length of Sentences
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+sentence.list.Repub$File=factor(sentence.list.Repub$File)
+
+sentence.list.Repub$FileOrdered=reorder(sentence.list.Repub$File, 
+                                  sentence.list.Repub$word.count, 
+                                  mean, 
+                                  order=T)
+par(mar=c(4, 11, 2, 2))
+
+beeswarm(word.count~FileOrdered, 
+         data=sentence.list.Repub,
+         horizontal = TRUE,
+         pch=16, col=alpha(brewer.pal(9, "Set1"), 0.6), 
+         cex=0.55, cex.axis=0.8, cex.lab=0.8,
+         spacing=5/nlevels(sentence.list.Repub$FileOrdered),
+         las=2, ylab="", xlab="Number of words in a sentence.",
+         main="Length of Sentences/Republican")
+```
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+sentence.list.Demo$File=factor(sentence.list.Demo$File)
+
+sentence.list.Demo$FileOrdered=reorder(sentence.list.Demo$File, 
+                                  sentence.list.Demo$word.count, 
+                                  mean, 
+                                  order=T)
+par(mar=c(4, 11, 2, 2))
+
+beeswarm(word.count~FileOrdered, 
+         data=sentence.list.Demo,
+         horizontal = TRUE,
+         pch=16, col=alpha(brewer.pal(9, "Set1"), 0.6), 
+         cex=0.55, cex.axis=0.8, cex.lab=0.8,
+         spacing=5/nlevels(sentence.list.Demo$FileOrdered),
+         las=2, ylab="", xlab="Number of words in a sentence.",
+         main="Length of Sentences/Democratic")
+```
+
+####Clustering of Emotions
+####Republican Party
+```{r, fig.width=5, fig.height=5,message=FALSE, warning=FALSE,echo=FALSE}
+heatmap.2(cor(sentence.list.Repub%>%select(anger:trust)), 
+          scale = "none", 
+          col = bluered(100), margin=c(6, 6), key=F,
+          trace = "none", density.info = "none")
+
+par(mar=c(4, 6, 2, 1))
+emo.means=colMeans(select(sentence.list.Repub, anger:trust)>0.01)
+col.use=c("red2", "darkgoldenrod1", 
+            "chartreuse3", "blueviolet",
+            "darkgoldenrod2", "dodgerblue3", 
+            "darkgoldenrod1", "darkgoldenrod1")
+barplot(emo.means[order(emo.means)], las=2, col=col.use[order(emo.means)], horiz=T, main="Clustering of emotions/Republican")
+```
+```{r, fig.height=5, fig.width=6,message=FALSE, warning=FALSE,echo=FALSE}
+presid.summary=tbl_df(sentence.list.Repub)%>%
+  filter(File%in%people.Repub)%>%
+  #group_by(paste0(type, File))%>%
+  group_by(File)%>%
+  summarise(
+    anger=mean(anger),
+    anticipation=mean(anticipation),
+    disgust=mean(disgust),
+    fear=mean(fear),
+    joy=mean(joy),
+    sadness=mean(sadness),
+    surprise=mean(surprise),
+    trust=mean(trust)
+    #negative=mean(negative),
+    #positive=mean(positive)
+  )
+
+presid.summary=as.data.frame(presid.summary)
+rownames(presid.summary)=as.character((presid.summary[,1]))
+km.res=kmeans(presid.summary[,-1], iter.max=200,
+              5)
+fviz_cluster(km.res, 
+             stand=F, repel= TRUE,
+             data = presid.summary[,-1], xlab="", xaxt="n",
+             show.clust.cent=FALSE,main="Clustering of emotions/Republican")
+```
+####Democratic Party
+```{r, fig.width=5, fig.height=5,message=FALSE, warning=FALSE,echo=FALSE}
+heatmap.2(cor(sentence.list.Demo%>%select(anger:trust)), 
+          scale = "none", 
+          col = bluered(100), margin=c(6, 6), key=F,
+          trace = "none", density.info = "none")
+
+par(mar=c(4, 6, 2, 1))
+emo.means=colMeans(select(sentence.list.Demo, anger:trust)>0.01)
+col.use=c("red2", "darkgoldenrod1", 
+            "chartreuse3", "blueviolet",
+            "darkgoldenrod2", "dodgerblue3", 
+            "darkgoldenrod1", "darkgoldenrod1")
+barplot(emo.means[order(emo.means)], las=2, col=col.use[order(emo.means)], horiz=T, main="Clustering of emotions/Democratic")
+```
+
+```{r, fig.height=5, fig.width=6,message=FALSE, warning=FALSE,echo=FALSE}
+presid.summary=tbl_df(sentence.list.Demo)%>%
+  filter(File%in%people.Demo)%>%
+  #group_by(paste0(type, File))%>%
+  group_by(File)%>%
+  summarise(
+    anger=mean(anger),
+    anticipation=mean(anticipation),
+    disgust=mean(disgust),
+    fear=mean(fear),
+    joy=mean(joy),
+    sadness=mean(sadness),
+    surprise=mean(surprise),
+    trust=mean(trust)
+    #negative=mean(negative),
+    #positive=mean(positive)
+  )
+
+presid.summary=as.data.frame(presid.summary)
+rownames(presid.summary)=as.character((presid.summary[,1]))
+km.res=kmeans(presid.summary[,-1], iter.max=200,
+              5)
+fviz_cluster(km.res, 
+             stand=F, repel= TRUE,
+             data = presid.summary[,-1], xlab="", xaxt="n",
+             show.clust.cent=FALSE,main="Clustering of emotions/Democratic")
+```
+
+
+#####Generally, the lengths and emotions differ from person to person, and did not demonstrate a strong correlation with political parties. A minor observation from the histogram is that the democrats used a more semantically negative vocabulary, while the republicans are more positive. However, since this is looking at text corpus on word level, it is difficult to reach any concrete conclusions. From here we proceed to examining the relationship between speech topics and the parties with which the speakers are affiliated.
+
+
+
+
+
+
+
+
+####Topics of Two Parties
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+corpus.list=sentence.list.all[2:(nrow(sentence.list.all)-1), ]
+sentence.pre=sentence.list.all$sentences[1:(nrow(sentence.list.all)-2)]
+sentence.post=sentence.list.all$sentences[3:(nrow(sentence.list.all)-1)]
+corpus.list$snipets=paste(sentence.pre, corpus.list$sentences, sentence.post, sep=" ")
+rm.rows=(1:nrow(corpus.list))[corpus.list$sent.id==1]
+rm.rows=c(rm.rows, rm.rows-1)
+corpus.list=corpus.list[-rm.rows, ]
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+docs <- Corpus(VectorSource(corpus.list$snipets))
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE,include=FALSE}
+#remove potentially problematic symbols
+docs <-tm_map(docs,content_transformer(tolower))
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+
+#remove punctuation
+docs <- tm_map(docs, removePunctuation)
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+
+#Strip digits
+docs <- tm_map(docs, removeNumbers)
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+
+#remove stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+
+#remove whitespace
+docs <- tm_map(docs, stripWhitespace)
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+
+#Stem document
+docs <- tm_map(docs,stemDocument)
+writeLines(as.character(docs[[sample(1:nrow(corpus.list), 1)]]))
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+dtm <- DocumentTermMatrix(docs)
+#convert rownames to filenames#convert rownames to filenames
+rownames(dtm) <- paste(corpus.list$type, corpus.list$File,
+                       corpus.list$Term, corpus.list$sent.id, sep="_")
+
+rowTotals <- apply(dtm , 1, sum) #Find the sum of words in each Document
+
+dtm  <- dtm[rowTotals> 0, ]
+corpus.list=corpus.list[rowTotals>0, ]
+
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#Set parameters for Gibbs sampling
+burnin <- 4000
+iter <- 2000
+thin <- 500
+seed <-list(2003,5,63,100001,765)
+nstart <- 5
+best <- TRUE
+
+#Number of topics
+k <- 15
+
+#Run LDA using Gibbs sampling
+ldaOut <-LDA(dtm, k, method="Gibbs", control=list(nstart=nstart, 
+                                                 seed = seed, best=best,
+                                                 burnin = burnin, iter = iter, 
+                                                 thin=thin))
+#write out results
+#docs to topics
+ldaOut.topics <- as.matrix(topics(ldaOut))
+table(c(1:k, ldaOut.topics))
+write.csv(ldaOut.topics,file=paste("../out",k,"DocsToTopics.csv"))
+
+#top 6 terms in each topic
+ldaOut.terms <- as.matrix(terms(ldaOut,20))
+write.csv(ldaOut.terms,file=paste("../out",k,"TopicsToTerms.csv"))
+
+#probabilities associated with each topic assignment
+topicProbabilities <- as.data.frame(ldaOut@gamma)
+write.csv(topicProbabilities,file=paste("../out",k,"TopicProbabilities.csv"))
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE,include=FALSE}
+terms.beta=ldaOut@beta
+terms.beta=scale(terms.beta)
+topics.terms=NULL
+for(i in 1:k){
+  topics.terms=rbind(topics.terms, ldaOut@terms[order(terms.beta[i,], decreasing = TRUE)[1:7]])
+}
+topics.terms
+ldaOut.terms
+```
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+topics.hash=c("Human", "Dream", "Freedom", "Law", "America", "Belief", "Unity", "WorkingFamilies", "Patriotism", "Government", "Justice", "Challenge", "Reform", "Equality", "Economy")
+corpus.list$ldatopic=as.vector(ldaOut.topics)
+corpus.list$ldahash=topics.hash[ldaOut.topics]
+
+colnames(topicProbabilities)=topics.hash
+corpus.list.df=cbind(corpus.list, topicProbabilities)
+```
+```{r, fig.width=6, fig.height=8,message=FALSE, warning=FALSE,echo=FALSE}
+par(mar=c(1,1,1,1))
+topic.summary=tbl_df(corpus.list.df)%>%
+              filter( File%in%people.all)%>%
+              select(File, Human:Economy)%>%
+              group_by(File)%>%
+              summarise_each(funs(mean))
+  
+topic.summary=as.data.frame(topic.summary)
+topic.summary <- topic.summary%>%slice(match(people.all,File))
+topic.summary=as.data.frame(topic.summary)
+rownames(topic.summary)=topic.summary[,1]
+
+#"Human", "Dream", "Freedom", "Law", "America", "Belief", "Unity", "WorkingFamilies", "Patriotism", "Government", "Justice", "Challenge", "Reform", "Equality", "Economy"
+
+topic.plot=c(1, 13, 9, 11, 8, 3, 7)
+print(topics.hash[topic.plot])
+
+heatmap.2(as.matrix(topic.summary[,topic.plot+1]), 
+          scale = "column", key=F, 
+          col = bluered(100),
+          cexRow = 0.9, cexCol = 0.9, margins = c(8, 8),
+          trace = "none", density.info = "none",dendrogram="none",Rowv = F,
+add.expr = abline(h=9.5))
+```
+##### Above the line are republican presidents, while democrats are located below the line. I did not observe as large a discrepancy between the two parties in topics concerned as expected.I hypothesize that this might be due to the fact that the time range of presidents examined is rather large, and the policies and stands of both parties might have changed drastically during that period.Therefore, we have decided to plot the topics against the speakers sorted in chronological order.
+
+
+
+#
+#
+#
+
+
+###PART II-Topics of Presidents in Chronological Order
+####Presidents in Chronological Order
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+people.year<- c('AndrewJackson', 'AbrahamLincoln', 'UlyssesSGrant', 'JamesGarfield', 'TheodoreRoosevelt', 'WilliamHowardTaft', 'WoodrowWilson', 'HerbertHoover', 'FranklinDRoosevelt', 'HarrySTruman', 'DwightDEisenHower', 'JohnFKennedy', 'LyndonBJohnson', 'RichardNixon', 'JimmyCarter', 'RonaldReagan', 'GeorgeBush', 'WilliamJClinton', 'GeorgeWBush', 'BarackObama', 'DonaldJTrump')
+
+people.year
+```
+
+
+#
+#
+
+####Change of Speech Topics in History
+```{r, fig.width=6, fig.height=8,message=FALSE, warning=FALSE,echo=FALSE}
+par(mar=c(1,1,1,1))
+topic.summary=tbl_df(corpus.list.df)%>%
+              filter( File%in%people.year)%>%
+              select(File, Human:Economy)%>%
+              group_by(File)%>%
+              summarise_each(funs(mean))
+  
+topic.summary=as.data.frame(topic.summary)
+topic.summary <- topic.summary%>%slice(match(people.year,File))
+topic.summary=as.data.frame(topic.summary)
+rownames(topic.summary)=topic.summary[,1]
+
+
+#"Human", "Dream", "Freedom", "Law", "America", "Belief", "Unity", "WorkingFamilies", "Patriotism", "Government", "Justice", "Challenge", "Reform", "Equality", "Economy"
+
+topic.plot=c(1, 13, 9, 11, 8, 3, 7)
+print(topics.hash[topic.plot])
+
+heatmap.2(as.matrix(topic.summary[,topic.plot+1]), 
+          scale = "column", key=F, 
+          col = bluered(100),
+          cexRow = 0.9, cexCol = 0.9, margins = c(8, 8),
+          trace = "none", density.info = "none",dendrogram="none",Rowv=F)
+```
+#####The vertical axis lists presidents in chronological order. It is notable that there is indeed a difference in the most talked about topics as time proceeded. From this we can conclude the topics in inaugural speeches are correlated to the eras in which the speeches took place.
+#####For concreteness, I have decided to examine some representative presidents.
+
+
+#
+#
+
+
+
+####Abraham Lincoln
+#####Key Topic: "Human"
+#####The key topic of the inaugural speech of Abraham Lincoln was "human". If we relate this to our domain knowledge about the historical background of his presidency, we can hypothesize that he might have been speaking about slavery. By examining the text of his speech, we confirmed this hypothesis.
+
+
+#
+#
+
+
+
+####UlyssesGrant
+#####Key Topic: "Patriotism"
+#####Ulysses S. Grant was elected president largely because of his contribution to the Union during the Civil War. Considering the post-war political atmosphere, it was understandable that "patriotism" was a significant topic of concern in his speech. As a former military commander, the bond between him and patriotism is in accordance with our intuition.
+#
+#
+
+
+
+
+####Harry Truman
+#####Key Topic: "Freedom"
+#####The most significant topic in Truman's speech was "freedom". Since Truman's famous Doctrine marked the beginning of the Cold War, it is reasonable to propose that he had been speaking about the rivalry between the Communism and Capitalism, and that he spoke about the former as a "threat to freedom"
+
+
+
+#
+#
+#
+
+###Part III Conlusion
+##### In this project I did an analysis of emotions, sentence lengths and topics of some U.S. president's speech, and drew a conclusion as follows. Party affiliation does not influence presidents' speech topics as expected. This may due to the fact that the policies and positions of both parties largely changed through different periods. And we did oberserve a relationship between the main focus of some presidents and their places in history.
+
+
+#
+#
+#
+
+
+
+###Part IV References
+#####The American Presidency Project, <http://www.presidency.ucsb.edu/inaugurals.php>
+#####Timeline of United States history, <https://en.wikipedia.org/wiki/Timeline_of_United_States_history> 
+#####<https://eight2late.wordpress.com/2015/09/29/a-gentle-introduction-to-topic-modeling-using-r/>
+#####<https://en.wikipedia.org/wiki/Truman_Doctrine>
